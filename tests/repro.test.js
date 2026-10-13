@@ -1,0 +1,13 @@
+const puppeteer=require('puppeteer-core');const M=__dirname+'/media/repro/';
+(async()=>{const b=await puppeteer.launch({executablePath:process.env.CHROME_PATH||'/usr/bin/google-chrome',headless:'new',args:['--no-sandbox']});const p=await b.newPage();await p.setViewport({width:1100,height:680});const errs=[];
+ p.on('pageerror',e=>errs.push(e.message));p.on('console',m=>{if(m.type()=='error')errs.push(m.text())});
+ await p.goto('file://'+require('path').resolve(__dirname,'../index.html')+'');await p.evaluate(()=>localStorage.clear());await p.reload();
+ await (await p.$('#dir')).uploadFile(M+'Flxweroff');await p.waitForFunction(()=>tracks.length==6);
+ await (await p.$('#dir')).uploadFile(M+'Lilith');await p.waitForFunction(()=>tracks.length==9,{timeout:30000});
+ await p.waitForFunction(()=>tracks.every(t=>t.dur>0),{timeout:30000}).catch(()=>{});
+ console.log(await p.evaluate(()=>tracks.map(t=>[t.path,t.artist,t.album,t.title,Math.round(t.dur/60)+'min'].join(' | ')).join('\n')));
+ await p.click('.tab[data-v="library"]');await new Promise(r=>setTimeout(r,200));
+ console.log('artists',JSON.stringify(await p.$$eval('#ltree .c[data-k=artist]',x=>x.map(d=>d.textContent))),'albums',JSON.stringify(await p.$$eval('#ltree .c[data-k=album]',x=>x.map(d=>d.textContent))));
+ await p.click('#ltree .c[data-k=artists]');await new Promise(r=>setTimeout(r,300));await p.screenshot({path:__dirname+'/../screenshots/library-two-artists.png'});
+ const lil=(await p.$$('#ltree .c[data-k=artist]'))[1];await lil.click();await new Promise(r=>setTimeout(r,200));await p.screenshot({path:__dirname+'/../screenshots/library-lilith-singles.png'});
+ console.log('ERRORS:',errs.length?errs:'none');await b.close()})();

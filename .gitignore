@@ -1,0 +1,8 @@
+node_modules/
+dist/
+desktop/out/
+desktop/app/index.html
+tests/media/
+*.mp3
+*.wav
+*.m3u

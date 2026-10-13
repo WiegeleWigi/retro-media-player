@@ -1,0 +1,11 @@
+{
+  "name": "retro-media-player",
+  "productName": "Retro Media Player",
+  "version": "1.0.0",
+  "description": "Retro-style media player with visualizations",
+  "main": "main.js",
+  "author": "Nejc Wiegele",
+  "license": "MIT",
+  "scripts": { "start": "electron ." },
+  "devDependencies": { "electron": "44.7.0", "@electron/packager": "18.4.4", "resedit": "^2.0.3", "png-to-ico": "^2.1.8" }
+}
