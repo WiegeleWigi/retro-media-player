@@ -1,5 +1,6 @@
 // Retro Media Player — Electron shell around the single-file web app in ./app/index.html
-const { app, BrowserWindow, Menu, shell, protocol, net, session } = require('electron');
+const { app, BrowserWindow, Menu, shell, protocol, net, session, ipcMain } = require('electron');
+const { serveFile, existsMany } = require('./media');
 const path = require('path');
 const { pathToFileURL } = require('url');
 
@@ -8,14 +9,15 @@ app.setPath('userData', path.join(app.getPath('appData'), 'Retro Media Player'))
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 
 // Serve the app from a fixed, secure custom origin (app://player) so localStorage survives moving/renaming the folder.
-protocol.registerSchemesAsPrivileged([{ scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }]);
+protocol.registerSchemesAsPrivileged([{ scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } },
+  { scheme: 'rmpfile', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }]); // remembered local music files
 const APP_DIR = path.join(__dirname, 'app');
 const CSP = [
   "default-src 'self' blob: data:",
   "script-src 'self' 'unsafe-inline' https://api.deezer.com https://itunes.apple.com", // inline app code + Discover JSONP
   "connect-src 'self' https: blob:",                                                     // MusicBrainz / ListenBrainz fetch
-  "img-src 'self' https: blob: data:",
-  "media-src 'self' https: blob: data:",                                                 // local files (blob:) + 30s previews
+  "img-src 'self' https: blob: data: rmpfile:",
+  "media-src 'self' https: blob: data: rmpfile:",                                                 // local files (blob:) + 30s previews
   "style-src 'self' 'unsafe-inline'",
 ].join('; ');
 
@@ -26,7 +28,7 @@ function createWindow() {
     width: 900, height: 640, minWidth: 700, minHeight: 480,
     title: 'Retro Media Player', backgroundColor: '#121722', autoHideMenuBar: true, show: false,
     icon: path.join(__dirname, 'build', process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
-    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false },
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false, preload: path.join(__dirname, 'preload.js') },
   });
   win.removeMenu();
   win.on('page-title-updated', e => e.preventDefault());
@@ -48,6 +50,8 @@ app.whenReady().then(() => {
     if (file.endsWith('.html')) headers.set('Content-Type', 'text/html; charset=utf-8');
     return new Response(res.body, { status: res.status, headers });
   });
+  protocol.handle('rmpfile', serveFile);
+  ipcMain.handle('rmp:exists', (e, paths) => existsMany(paths));
   session.defaultSession.setPermissionRequestHandler((wc, perm, cb) => cb(['fullscreen', 'media', 'clipboard-sanitized-write'].includes(perm)));
   createWindow();
 });

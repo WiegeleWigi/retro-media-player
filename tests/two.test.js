@@ -1,6 +1,6 @@
 const puppeteer=require('puppeteer-core');const M=__dirname+'/media/two/';
 (async()=>{const b=await puppeteer.launch({executablePath:process.env.CHROME_PATH||'/usr/bin/google-chrome',headless:'new',args:['--no-sandbox','--autoplay-policy=no-user-gesture-required']});const errs=[];
- async function run(file,label,dirs,ls){const p=await b.newPage();await p.setViewport({width:1100,height:680});p.on('pageerror',e=>errs.push(label+': '+e.message));
+ async function run(file,label,dirs,ls){const p=await (await b.createBrowserContext()).newPage();await p.setViewport({width:1100,height:680});p.on('pageerror',e=>errs.push(label+': '+e.message));
   await p.goto('file://'+file);await p.evaluate(ls=>{localStorage.clear();if(ls)localStorage.setItem('wmp.renames',ls)},ls);await p.reload();
   let n=0;for(const d of dirs){await (await p.$('#dir')).uploadFile(M+d);n+=await p.evaluate(()=>0);await p.waitForFunction(k=>tracks.length>k,{},n);n=await p.evaluate(()=>tracks.length);await new Promise(r=>setTimeout(r,300))}
   await p.click('.tab[data-v="library"]');await new Promise(r=>setTimeout(r,200));

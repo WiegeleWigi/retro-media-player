@@ -27,6 +27,7 @@ Download or clone this repo and open `index.html` in Chrome, Edge or Firefox —
 - **Library**: artists → albums tree, album-art tiles, search, play album; reads MP3 ID3v1/v2 tags and cover art, falls back to folder names (`Artist/Album/`, `Artist - Album (Year)`, loose files → *Singles*)
 - Add files or **whole folders** (button or drag-and-drop)
 - Rename artists / albums / titles (right-click, ✎ or F2), create artists and albums, move tracks by drag-and-drop or *Move to…* — all remembered
+- **Your library is remembered** after closing: the desktop app remembers where your music files are (moved/deleted files are greyed out and skipped); the web version keeps a copy of imported songs in the browser's storage. Playlist order, Burn list, renames, custom artists/albums, last song + position, volume, shuffle/repeat are restored too. *Clear* forgets the library.
 - **Discover**: song recommendations for the artists in your library (Deezer, MusicBrainz/ListenBrainz, iTunes — no API keys), 30-second previews, links to Deezer and YouTube, and per-artist “sounds like” / genre seeds for underground artists
 - **Burn** list with an 80-minute CD capacity bar and **Sync** to a pretend device (both export `.m3u` playlists)
 

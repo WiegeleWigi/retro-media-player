@@ -40,6 +40,7 @@ html,body{margin:0;height:100%;background:#c9d3de linear-gradient(#e8eef5,#9fb0c
 #list li:hover{background:#d2e4fa}
 #list li.sel{background:#b7d3f7}
 #list li.play{color:#1a63c8;font-weight:600}
+#list li.miss,tr.miss td{color:#999!important;font-style:italic;text-decoration:line-through}
 #list li.play:before{content:"▸";position:absolute;left:2px}
 #list .empty{color:#678;font-style:italic;padding:8px}
 #bar{height:62px;display:flex;flex-direction:column;background:linear-gradient(#2c3446,#0f131c 35%,#020305);border-top:1px solid #4a5670}
@@ -295,19 +296,19 @@ async function readTags(t){const f=t.file;try{
  const h10=new Uint8Array(await f.slice(0,10).arrayBuffer());let head=h10;
  if(h10[0]==73&&h10[1]==68&&h10[2]==51){const n=10+id3ss(h10,6);head=new Uint8Array(await f.slice(0,Math.min(n,f.size,32<<20)).arrayBuffer())}
  const tail=f.size>=128?new Uint8Array(await f.slice(f.size-128).arrayBuffer()):null;
- const g=parseID3(head,tail);applyTags(t,g);if(g.pic)t.art=URL.createObjectURL(new Blob([g.pic.data],{type:g.pic.mime}))}catch(e){console.warn('tag read failed',t.fname,e)}}
+ const g=parseID3(head,tail);applyTags(t,g);if(g.pic){t.artBlob=new Blob([g.pic.data],{type:g.pic.mime});t.art=URL.createObjectURL(t.artBlob)}}catch(e){console.warn('tag read failed',t.fname,e)}}
 let durQ=[],durN=0,rvT;
 function queueDur(t){durQ.push(t);pumpDur()}
 function pumpDur(){while(durN<3&&durQ.length){const t=durQ.shift();durN++;const a=new Audio();a.preload='metadata';
- const done=()=>{if(isFinite(a.duration))t.dur=a.duration;a.removeAttribute('src');a.load();durN--;clearTimeout(rvT);rvT=setTimeout(refreshViews,150);pumpDur()};
+ const done=()=>{if(isFinite(a.duration)){t.dur=a.duration;persistMeta(t)};a.removeAttribute('src');a.load();durN--;clearTimeout(rvT);rvT=setTimeout(refreshViews,150);pumpDur()};
  a.onloadedmetadata=done;a.onerror=done;a.src=t.url}}
 let loading=0;
 async function addFiles(entries,target){const a=entries.filter(e=>isAudio(e.file.name)||(e.file.type||'').startsWith('audio/'));if(!a.length)return;
  loading++;$('cur').textContent='Reading tags… ('+a.length+' files)';
- const batch=a.map(e=>makeTrack(e.file,e.path));
+ const known=new Set(tracks.map(trackId));const batch=a.map(e=>makeTrack(e.file,e.path)).filter(t=>{const k=trackId(t);if(known.has(k))return false;known.add(k);return true});if(!batch.length){loading--;$('cur').textContent=tracks[idx]?tracks[idx].title:'Already in your library';return}
  for(let i=0;i<batch.length;i+=8)await Promise.all(batch.slice(i,i+8).map(readTags));
  fixFolderArtists(batch);batch.forEach(t=>{t.origArtist=t.artist;t.origAlbum=t.album;t.origTitle=t.title;applyRenames(t,REN);applyManual(t,MAN)});if(target){assignTracks(MAN,batch,target);saveMan();batch.forEach(t=>applyManual(t,MAN))}batch.sort(cmpTracks);loading--;
- if(target)refreshViews();const first=tracks.length;batch.forEach(t=>{t.url=URL.createObjectURL(t.file);tracks.push(t);queueDur(t)});canonArtists(tracks);render();refreshViews();
+ if(target)refreshViews();const first=tracks.length;batch.forEach(t=>{t.added=Date.now();if(RMP){try{t.filePath=RMP.pathForFile(t.file)||undefined}catch(e){}}t.url=URL.createObjectURL(t.file);tracks.push(t);queueDur(t)});canonArtists(tracks);render();refreshViews();persistTracks(batch);
  if(!playing||demo)playIdx(first);else $('cur').textContent=tracks[idx]?tracks[idx].title:'';}
 async function handleDrop(dt,target){const items=[...(dt.items||[])],ents=[];
  for(const it of items){if(it.kind!='file')continue;const e=it.webkitGetAsEntry&&it.webkitGetAsEntry();if(e)ents.push(e);else{const f=it.getAsFile();if(f)ents.push({plain:f})}}
@@ -317,10 +318,10 @@ function setArt(t){const a=$('art'),svg=a.querySelector('svg'),im=$('artImg')||O
  im.style.cssText='width:96px;height:96px;object-fit:cover;border:1px solid #9fb2ca;box-shadow:2px 2px 4px rgba(0,0,0,.25)';
  if(t&&t.art){im.src=t.art;if(!im.parentNode)a.insertBefore(im,$('cur'));svg.style.display='none'}else{im.remove();svg.style.display=''}}
 function render(){const l=$('list');l.innerHTML='';if(!tracks.length){l.innerHTML='<li class="empty">No items. Drag audio files or folders here, or use “Add files…” / “Add folder…”. Press Play for the built-in demo.</li>';return}
- tracks.forEach((t,i)=>{const li=document.createElement('li');li.textContent=t.title+(t.dur?'  ('+fmt(t.dur)+')':'');li.title=t.path;li.className=(i==idx?'play ':'')+(i==sel?'sel':'');
+ tracks.forEach((t,i)=>{const li=document.createElement('li');li.textContent=t.title+(t.dur?'  ('+fmt(t.dur)+')':'');li.title=t.path;li.className=(i==idx?'play ':'')+(i==sel?'sel ':'')+(t.missing?'miss':'');if(t.missing)li.title=(t.filePath||t.path)+' — file not found';
   li.onclick=()=>{sel=i;render()};li.ondblclick=()=>userPlay(i);l.appendChild(li)})}
-function playIdx(i){if(i<0||i>=tracks.length)return;if(preview)stopPreview();ensureAC();stopDemo();idx=i;au.src=tracks[i].url;au.play().catch(e=>console.warn(e));AC.resume();
- playing=true;$('cur').textContent=tracks[i].title+(tracks[i].artist&&tracks[i].artist!='Unknown Artist'?' — '+tracks[i].artist:'');setArt(tracks[i]);render();refreshViews();updUI()}
+function playIdx(i,hop){if(i<0||i>=tracks.length)return;if(tracks[i].missing){if((hop|0)>=tracks.length)return;const n=(i+1)%tracks.length;if(tracks.every(t=>t.missing))return;return playIdx(n,(hop|0)+1)}if(preview)stopPreview();ensureAC();stopDemo();idx=i;au.src=tracks[i].url;au.play().catch(e=>console.warn(e));AC.resume();
+ playing=true;saveStateSoon();$('cur').textContent=tracks[i].title+(tracks[i].artist&&tracks[i].artist!='Unknown Artist'?' — '+tracks[i].artist:'');setArt(tracks[i]);render();refreshViews();updUI()}
 function nextIdx(d){if(!tracks.length)return -1;if(queue){const p=queue.indexOf(idx);if(p>=0){const n=p+d;if(n>=0&&n<queue.length)return queue[n];if(repeat)return queue[(n+queue.length)%queue.length];queue=null;return -1}queue=null}if(shuffle&&tracks.length>1){let n;do n=Math.floor(Math.random()*tracks.length);while(n==idx);return n}
  let n=idx+d;if(n>=tracks.length)return repeat?0:-1;if(n<0)return repeat?tracks.length-1:0;return n}
 au.onended=()=>{if(preview){stopPreview();renderDiscover();return}const n=nextIdx(1);if(n>=0)playIdx(n);else{playing=false;updUI()}};
@@ -343,7 +344,7 @@ $('addb').onclick=$('libAddF').onclick=()=>$('file').click();$('addd').onclick=$
 $('file').oncancel=$('dir').oncancel=()=>importTarget=null;
 $('file').onchange=e=>{const tg=importTarget;importTarget=null;addFiles([...e.target.files].map(f=>({file:f,path:f.name})),tg);e.target.value=''};
 $('dir').onchange=e=>{const tg=importTarget;importTarget=null;addFiles([...e.target.files].map(f=>({file:f,path:f.webkitRelativePath||f.name})),tg);e.target.value=''};
-$('clr').onclick=()=>{if(!demo)au.pause();au.removeAttribute('src');tracks.forEach(t=>URL.revokeObjectURL(t.url));tracks=[];idx=sel=-1;burn=[];if(!demo)playing=false;setArt(null);render();refreshViews();updUI()};
+$('clr').onclick=()=>{if(!demo)au.pause();au.removeAttribute('src');tracks.forEach(t=>URL.revokeObjectURL(t.url));tracks=[];idx=sel=-1;burn=[];forgetLibrary();if(!demo)playing=false;setArt(null);render();refreshViews();updUI()};
 // ---------- tab views ----------
 let curView='now',hist=['now'],hpos=0,libSel={k:'songs'},burn=[],ripSt={},ripping=false,syncSel=new Set(),syncAllOn=true;
 const VIEWS=['now','library','rip','burn','sync'];
@@ -360,7 +361,7 @@ function songTable(list,opts={}){const cols=opts.cols||['#','Title','Artist','Al
  let h='<table class="tl"><tr>'+(opts.check?'<th style="width:24px"></th>':'')+cols.map(c=>'<th>'+c+'</th>').join('')+'</tr>';
  list.forEach((t,i)=>{const ti=tracks.indexOf(t);const cell={'#':t.trackNo??'','Title':esc(t.title),'Artist':esc(t.artist),'Album':esc(t.album),'Length':t.dur?fmt(t.dur):'',
    'Rip Status':opts.status?opts.status(t):'','No.':i+1};
-  h+=`<tr data-i="${ti}" data-n="${i}" class="${ti==idx?'play':''}" ${opts.drag?'draggable="true"':''}>`+(opts.check?`<td><input type="checkbox" data-c="${ti}" ${opts.check(t)?'checked':''}></td>`:'')+cols.map(c=>'<td>'+cell[c]+'</td>').join('')+'</tr>'});
+  h+=`<tr data-i="${ti}" data-n="${i}" class="${ti==idx?'play':''}${t.missing?' miss':''}" ${opts.drag?'draggable="true"':''}>`+(opts.check?`<td><input type="checkbox" data-c="${ti}" ${opts.check(t)?'checked':''}></td>`:'')+cols.map(c=>'<td>'+cell[c]+'</td>').join('')+'</tr>'});
  return h+'</table>'}
 function bindRows(el,dbl){el.querySelectorAll('tr[data-i]').forEach(r=>{r.onclick=e=>{el.querySelectorAll('tr.sel').forEach(x=>x.classList.remove('sel'));r.classList.add('sel')};
  r.ondblclick=()=>dbl(+r.dataset.i,r)})}
@@ -402,7 +403,7 @@ function renderBurn(){const S=$('bsrc');S.innerHTML=tracks.length?songTable(trac
  $('capTxt').innerHTML=`<b>${fmt(tot)}</b> of 80:00 used — ${over?'<span style="color:#c22">'+fmt(tot-CD)+' over capacity (disc 2 needed)</span>':fmt(CD-tot)+' remaining'} · ${burn.length} item(s)`;$('burnGo').disabled=!burn.length}
 const bl=$('blist');bl.ondragover=e=>{if([...e.dataTransfer.types].includes('text/x-wmp')){e.preventDefault();e.stopPropagation();bl.classList.add('droptgt')}};
 bl.ondragleave=()=>bl.classList.remove('droptgt');
-bl.ondrop=e=>{const i=e.dataTransfer.getData('text/x-wmp');if(i==='')return;e.preventDefault();e.stopPropagation();bl.classList.remove('droptgt');$('drop').style.display='none';burn.push(tracks[+i]);renderBurn()};
+bl.ondrop=e=>{const i=e.dataTransfer.getData('text/x-wmp');if(i==='')return;e.preventDefault();e.stopPropagation();bl.classList.remove('droptgt');$('drop').style.display='none';burn.push(tracks[+i]);renderBurn();saveStateSoon()};
 $('burnAll').onclick=()=>{burn.push(...tracks);renderBurn()};$('burnClr').onclick=()=>{burn=[];renderBurn()};
 function download(name,text){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type:'audio/x-mpegurl'}));a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000)}
 async function fakeProg(el,ms){el.style.display='';const i=el.firstChild;for(let p=0;p<=100;p+=2){i.style.width=p+'%';await new Promise(r=>setTimeout(r,ms/50))}}
@@ -776,4 +777,65 @@ buildPresetUI();render();refreshViews();updUI();showName();loop();
 if(/[?&]demo/.test(location.search))setTimeout(()=>{startDemo();AC.resume()},100);
 if(/[?&]preset=(\d+)/.test(location.search))setPreset(+RegExp.$1%presets.length,true);
 if(/[?&]tab=(\w+)/.test(location.search))go(RegExp.$1);
+// ---------- persistence: library survives restart (v1.1) ----------
+// Desktop (Electron): remember each file's absolute path, play it via rmpfile:// after restart.
+// Browser: keep a copy of each audio file in IndexedDB. Playlist order, burn list, position, volume, shuffle/repeat in IndexedDB too.
+const RMP=window.rmpDesktop||null,PDB='rmp-library',PDB_V=1;let pdbP=null,restoring=false,stSaveT=0,lastSt='';
+function pdb(){if(pdbP)return pdbP;pdbP=new Promise((res,rej)=>{if(!window.indexedDB)return rej(new Error('no IndexedDB'));const r=indexedDB.open(PDB,PDB_V);
+ r.onupgradeneeded=()=>{const d=r.result;if(!d.objectStoreNames.contains('tracks'))d.createObjectStore('tracks',{keyPath:'id'});if(!d.objectStoreNames.contains('state'))d.createObjectStore('state')};
+ r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});pdbP.catch(()=>{});return pdbP}
+function pdbTx(store,mode,fn){return pdb().then(d=>new Promise((res,rej)=>{const tx=d.transaction(store,mode),s=tx.objectStore(store);let out;const q=fn(s);if(q)q.onsuccess=()=>out=q.result;
+ tx.oncomplete=()=>res(out);tx.onerror=()=>rej(tx.error);tx.onabort=()=>rej(tx.error||new Error('aborted'))}))}
+const trackId=t=>t.id||(t.id=trackKey(t)+'|'+((t.file&&t.file.lastModified)||t.mtime||0));
+const META_KEYS=['path','folder','fname','name','trackNo','dur','artistFrom','artistDir','albumTagged','year','genre','albumArtist','disc'];
+function trackRec(t){const r={id:trackId(t),v:1,size:(t.file&&t.file.size)||t.size||0,mtime:(t.file&&t.file.lastModified)||t.mtime||0,type:(t.file&&t.file.type)||t.type||'',
+  title:t.origTitle??t.title,artist:t.origArtist??t.artist,album:t.origAlbum??t.album,added:t.added||Date.now()};
+ META_KEYS.forEach(k=>{if(t[k]!==undefined&&t[k]!==null)r[k]=t[k]});if(t.artBlob)r.art=t.artBlob;
+ let fp=t.filePath;if(!fp&&RMP&&t.file){try{fp=RMP.pathForFile(t.file)}catch(e){}}if(fp){r.filePath=fp;t.filePath=fp}else if(t.file)r.blob=t.file;return r}
+let noticeT;function rmpNotice(msg,sticky){let n=$('rmpNotice');if(!n){n=document.createElement('div');n.id='rmpNotice';
+  n.style.cssText='position:fixed;left:50%;bottom:64px;transform:translateX(-50%);max-width:80%;background:#fff8d6;color:#432;border:1px solid #c9a93c;border-radius:3px;padding:6px 12px;font:12px Segoe UI,Tahoma,sans-serif;box-shadow:2px 2px 6px rgba(0,0,0,.3);z-index:9999;cursor:pointer';
+  n.onclick=()=>n.remove();document.body.appendChild(n)}n.textContent=msg;n.title='Click to dismiss';clearTimeout(noticeT);if(!sticky)noticeT=setTimeout(()=>n.remove(),12000)}
+const isQuota=e=>e&&(e.name=='QuotaExceededError'||e.code==22||/quota/i.test(e.message||''));
+async function persistTracks(list){let failed=0,quota=false;
+ for(const t of list){try{await pdbTx('tracks','readwrite',s=>s.put(trackRec(t)));t.saved=true}
+  catch(e){failed++;if(isQuota(e))quota=true;else console.warn('could not save track',t.fname,e);
+   if(t.artBlob){try{const r=trackRec(t);delete r.art;await pdbTx('tracks','readwrite',s=>s.put(r));t.saved=true;failed--}catch(e2){}}}}
+ if(failed)rmpNotice(quota?`Browser storage is full: ${failed} song(s) will play now but won't be remembered after closing. Free up disk space or use the desktop app.`
+  :`${failed} song(s) could not be saved and won't be remembered after closing.`);saveStateSoon();return failed}
+function persistMeta(t){if(t&&t.saved&&!restoring)pdbTx('tracks','readwrite',s=>s.get(trackId(t))).then(r=>{if(r){r.dur=t.dur;return pdbTx('tracks','readwrite',s=>s.put(r))}}).catch(()=>{})}
+function curState(){return {order:tracks.map(trackId),burn:burn.map(trackId),cur:idx>=0&&tracks[idx]?trackId(tracks[idx]):null,
+ pos:idx>=0&&!demo&&!preview&&isFinite(au.currentTime)?au.currentTime:0,vol:+$('vol').value,muted,shuffle,repeat}}
+function saveState(){if(restoring)return;const s=curState(),j=JSON.stringify(s);if(j==lastSt)return;lastSt=j;pdbTx('state','readwrite',st=>st.put(s,'player')).catch(e=>console.warn('state save failed',e))}
+function saveStateSoon(){clearTimeout(stSaveT);stSaveT=setTimeout(saveState,400)}
+async function forgetLibrary(){try{await pdbTx('tracks','readwrite',s=>s.clear());lastSt='';saveState()}catch(e){}}
+function fileUrl(p){return 'rmpfile://local/'+encodeURIComponent(p)}
+async function restoreLibrary(){let recs,st;try{[recs,st]=await Promise.all([pdbTx('tracks','readonly',s=>s.getAll()),pdbTx('state','readonly',s=>s.get('player'))])}
+ catch(e){console.warn('library restore unavailable',e);return}
+ if(st){if(st.vol>=0&&st.vol<=1)$('vol').value=st.vol;muted=!!st.muted;shuffle=!!st.shuffle;repeat=!!st.repeat;setVol();updUI()}
+ if(!recs||!recs.length)return;restoring=true;
+ let exists={};const paths=recs.filter(r=>r.filePath).map(r=>r.filePath);
+ if(paths.length){if(RMP){try{exists=await RMP.exists(paths)}catch(e){}}}
+ const byId=new Map();for(const r of recs){const t={file:r.blob||null,id:r.id,size:r.size,mtime:r.mtime,type:r.type,added:r.added,art:null,saved:true};
+  META_KEYS.forEach(k=>{if(r[k]!==undefined)t[k]=r[k]});t.title=r.title;t.artist=r.artist;t.album=r.album;t.dur=r.dur||0;t.origArtist=r.artist;t.origAlbum=r.album;t.origTitle=r.title;
+  if(r.art){t.artBlob=r.art;t.art=URL.createObjectURL(r.art)}
+  if(r.blob)t.url=URL.createObjectURL(r.blob);else if(r.filePath&&RMP){t.filePath=r.filePath;t.url=fileUrl(r.filePath);if(exists[r.filePath]===false)t.missing=true}
+  else t.missing=true;
+  applyRenames(t,REN);applyManual(t,MAN);byId.set(r.id,t)}
+ const order=(st&&st.order)||[],seen=new Set(),list=[];order.forEach(id=>{const t=byId.get(id);if(t&&!seen.has(id)){seen.add(id);list.push(t)}});
+ [...byId.values()].filter(t=>!seen.has(t.id)).sort(cmpTracks).forEach(t=>list.push(t));
+ const have=new Set(tracks.map(trackId));const add=list.filter(t=>!have.has(t.id));tracks=add.concat(tracks);
+ if(st&&st.burn)burn=st.burn.map(id=>byId.get(id)).filter(Boolean);
+ canonArtists(tracks);tracks.forEach(t=>{if(!t.dur&&!t.missing)queueDur(t)});
+ const ci=st&&st.cur?tracks.findIndex(t=>t.id==st.cur):-1;
+ if(ci>=0&&!tracks[ci].missing&&!playing){idx=sel=ci;au.src=tracks[ci].url;const pos=+st.pos||0;if(pos>0)au.addEventListener('loadedmetadata',()=>{try{au.currentTime=Math.min(pos,(au.duration||pos+1)-.5)}catch(e){}},{once:true});
+  $('cur').textContent=tracks[ci].title+(tracks[ci].artist&&tracks[ci].artist!='Unknown Artist'?' — '+tracks[ci].artist:'');setArt(tracks[ci])}
+ restoring=false;lastSt=JSON.stringify(curState());render();refreshViews();updUI();
+ const miss=tracks.filter(t=>t.missing).length;if(miss)rmpNotice(`${miss} song(s) could not be found (moved or deleted). They are shown greyed out and will be skipped.`,true);
+ window.rmpRestored=true}
+setInterval(()=>{if(!restoring&&(playing||idx>=0))saveState()},3000);
+addEventListener('pagehide',saveState);addEventListener('beforeunload',saveState);
+$('vol').addEventListener('change',saveStateSoon);['mute','shuf','rep','burnAll','burnClr'].forEach(i=>{const e=$(i);if(e)e.addEventListener('click',saveStateSoon)});
+au.addEventListener('error',()=>{if(idx<0||preview||demo||!au.getAttribute('src'))return;const t=tracks[idx];if(!t||t.missing)return;t.missing=true;render();refreshViews();
+ rmpNotice('Could not open “'+t.title+'” — the file may have been moved or deleted. Skipping.');const n=nextIdx(1);if(n>=0&&n!=idx&&playing)playIdx(n);else{playing=false;updUI()}});
+window.rmpRestoreP=restoreLibrary();
 </script></body></html>

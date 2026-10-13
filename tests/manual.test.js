@@ -3,7 +3,7 @@ const puppeteer=require('puppeteer-core');const M=__dirname+'/media/repro/';
  p.on('pageerror',e=>errs.push(e.message));p.on('console',m=>{if(m.type()=='error')errs.push(m.text())});
  let answers=[];p.on('dialog',d=>d.accept(answers.shift()||''));const W=ms=>new Promise(r=>setTimeout(r,ms));
  const tree=()=>p.$$eval('#ltree .c[data-k=artist],#ltree .c[data-k=album]',x=>x.map(d=>(d.dataset.k=='album'?'   ':'')+d.textContent));
- await p.goto('file://'+require('path').resolve(__dirname,'../index.html')+'');await p.evaluate(()=>localStorage.clear());await p.reload();
+ await p.goto('file://'+require('path').resolve(__dirname,'../index.html')+'');await p.evaluate(()=>{localStorage.clear();indexedDB.deleteDatabase('rmp-library')});await p.reload();
  const load=async()=>{await (await p.$('#dir')).uploadFile(M+'Flxweroff');await p.waitForFunction(()=>tracks.length==6);await (await p.$('#dir')).uploadFile(M+'Lilith');await p.waitForFunction(()=>tracks.length==9);await W(300)};
  await load();await p.click('.tab[data-v="library"]');
  answers=['Space Jack'];await p.click('#newArt');await W(200);
@@ -34,7 +34,7 @@ const puppeteer=require('puppeteer-core');const M=__dirname+'/media/repro/';
  await p.click('#ltree .c[data-k=artist][data-v="Lilith"]');await W(200);
  console.log('tree:',JSON.stringify(await tree()));await p.screenshot({path:__dirname+'/../screenshots/library-manual.png'});
  // persistence: reload + re-import the same folders
- await p.reload();await load();await p.click('.tab[data-v="library"]');await W(200);
+ await p.reload();await p.evaluate(()=>rmpRestoreP);console.log('restored after reload (no re-import needed):',await p.evaluate(()=>tracks.length));await p.click('.tab[data-v="library"]');await W(200);
  console.log('after reload+reimport tree:',JSON.stringify(await tree()));
  console.log('Lilith after reload:',await p.evaluate(()=>tracks.filter(t=>t.path.startsWith('Lilith')).map(t=>t.title+' → '+t.artist+'/'+t.album).join(', ')));
  console.log('ERRORS:',errs.length?errs:'none');await b.close()})();

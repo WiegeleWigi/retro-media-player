@@ -1,7 +1,7 @@
 {
   "name": "retro-media-player",
   "productName": "Retro Media Player",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Retro-style media player with visualizations",
   "main": "main.js",
   "author": "Nejc Wiegele",

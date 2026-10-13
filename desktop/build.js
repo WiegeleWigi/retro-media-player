@@ -4,7 +4,7 @@ const ResEdit = require('resedit');
 (async () => {
   fs.writeFileSync('app/index.html', fs.readFileSync('../index.html','utf8').replace('<title>Windows Media Player</title>','<title>Retro Media Player</title>').replace("$('bclose').onclick=()=>{stopAll();","$('bclose').onclick=()=>{stopAll();if(/Electron/.test(navigator.userAgent))return window.close();"));
   const common = { dir: '.', name: 'Retro Media Player', executableName: 'Retro Media Player', out: 'out', overwrite: true, asar: true, prune: true,
-    ignore: [/^\/out/, /^\/build\.js$/, /^\/smoke/, /^\/node_modules/], appCopyright: '© 2026', appVersion: '1.0.0' };
+    ignore: [/^\/out/, /^\/build\.js$/, /^\/smoke/, /\.test\.js$/, /^\/node_modules/], appCopyright: '© 2026', appVersion: '1.1.0' };
   const plat = process.argv[2] || 'win32';
   const [dir] = await packager({ ...common, platform: plat, arch: 'x64', icon: 'build/icon.ico',
     win32metadata: { CompanyName: 'Retro Media Player', FileDescription: 'Retro Media Player', ProductName: 'Retro Media Player', InternalName: 'Retro Media Player', OriginalFilename: 'Retro Media Player.exe' } });
@@ -19,7 +19,7 @@ const ResEdit = require('resedit');
     const vi = ResEdit.Resource.VersionInfo.fromEntries(res.entries)[0];
     if (vi) { const l = { lang: 1033, codepage: 1200 };
       vi.setStringValues(l, { FileDescription: 'Retro Media Player', ProductName: 'Retro Media Player', CompanyName: 'Retro Media Player', InternalName: 'Retro Media Player', OriginalFilename: 'Retro Media Player.exe', LegalCopyright: '© 2026' });
-      vi.setFileVersion(1, 0, 0, 0, 1033); vi.setProductVersion(1, 0, 0, 0, 1033); vi.outputToResourceEntries(res.entries); }
+      vi.setFileVersion(1, 1, 0, 0, 1033); vi.setProductVersion(1, 1, 0, 0, 1033); vi.outputToResourceEntries(res.entries); }
     res.outputResource(pe); fs.writeFileSync(exe, Buffer.from(pe.generate()));
     console.log('icon + version info written (icon group', gid, ')');
   }
